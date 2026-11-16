@@ -56,12 +56,15 @@ function measure(ctx) {
 }
 
 /* ------------------------------------------------------------ corruptions */
-function drawClean(ctx) {
-  ctx.filter = 'none';
+function paint(ctx, filter) {
+  ctx.filter = filter || 'none';
   ctx.globalAlpha = 1;
   ctx.clearRect(0, 0, W, H);
   ctx.drawImage(img, 0, 0, W, H);
+  ctx.filter = 'none';
 }
+
+function drawClean(ctx) { paint(ctx, 'none'); }
 
 function addNoise(ctx, amount, seed) {
   const id = ctx.getImageData(0, 0, W, H);
@@ -101,28 +104,20 @@ async function applyCorruption(ctx, cond, s) {
 
   switch (cond) {
     case 'brightness':
-      ctx.filter = `brightness(${(1 - 0.14 * s).toFixed(3)})`;
-      drawClean(ctx);
-      ctx.filter = 'none';
+      paint(ctx, `brightness(${(1 - 0.14 * s).toFixed(3)})`);
       break;
 
     case 'contrast':
-      ctx.filter = `contrast(${(1 - 0.13 * s).toFixed(3)})`;
-      drawClean(ctx);
-      ctx.filter = 'none';
+      paint(ctx, `contrast(${(1 - 0.13 * s).toFixed(3)})`);
       break;
 
     case 'lowlight':
-      ctx.filter = `brightness(${Math.pow(0.62, s / 2.2).toFixed(3)})`;
-      drawClean(ctx);
-      ctx.filter = 'none';
+      paint(ctx, `brightness(${Math.pow(0.55, s / 2.0).toFixed(3)}) contrast(${(1 + 0.06 * s).toFixed(2)})`);
       addNoise(ctx, 2.2 * s, 7 + s);
       break;
 
     case 'blur':
-      ctx.filter = `blur(${(s * 0.9).toFixed(2)}px)`;
-      drawClean(ctx);
-      ctx.filter = 'none';
+      paint(ctx, `blur(${(s * 0.9).toFixed(2)}px)`);
       break;
 
     case 'motion_blur': {
