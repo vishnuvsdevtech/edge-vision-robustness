@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Edge Vision Robustness — measure where your detector breaks</title>
+<meta name="description" content="A robustness harness for deployed object detectors: sweep the conditions a camera actually meets — night, rain, motion blur, compression, distance — and report the failure envelope instead of a clean-set mAP.">
+<meta name="theme-color" content="#0c0d0b">
+<meta property="og:title" content="Edge Vision Robustness — measure where your detector breaks">
+<meta property="og:description" content="A clean-set mAP says nothing about a rainy gantry at 2 Mbps. This measures the failure envelope per condition, per class, at your deployed threshold.">
+<meta property="og:type" content="website">
+<link rel="canonical" href="https://vishnuvsdevtech.github.io/edge-vision-robustness/">
+<link rel="stylesheet" href="assets/site.css">
+</head>
+<body>
+
+<header class="top">
+  <div class="brand"><span class="dot"></span><strong>EDGE VISION ROBUSTNESS</strong><span class="tag mono">POC · v0.1</span></div>
+  <a class="gh mono" href="https://github.com/vishnuvsdevtech/edge-vision-robustness">source →</a>
+</header>
+
+<main>
+
+  <!-- ---------------------------------------------------------------- hero -->
+  <section class="hero">
+    <p class="eyebrow mono">the number nobody measures</p>
+    <h1>Your model reports <span class="dim">mAP&nbsp;0.91</span>.<br>Your camera runs at <em>night, in rain, at 2&nbsp;Mbps</em>.</h1>
+    <p class="lede">
+      Detectors are validated on clean images and deployed in conditions nobody wrote a test for.
+      This harness sweeps the actual failure modes — lighting, weather, motion, compression,
+      distance — and reports <strong>where</strong> the model breaks, <strong>by how much</strong>,
+      and <strong>at which severity</strong>, per class and at the threshold production runs at.
+    </p>
+    <div class="specs mono">
+      <span>10 conditions</span><span>5 severities</span><span>per-class recall</span>
+      <span>threshold calibration</span><span>runs on one GPU</span>
+    </div>
+  </section>
+
+  <!-- ------------------------------------------------------- live explorer -->
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Corruption explorer <span class="muted">— live, in your browser</span></h2>
+      <p class="muted small">The corruption engine below is the real one. It runs on your image and reports
+      what each condition does to the <em>signal</em>: how much high-frequency detail survives.
+      That is the quantity detectors and OCR key on — not a stand-in for model accuracy, and
+      not presented as one.</p>
+    </div>
+
+    <div class="explorer">
+      <div class="canvas-wrap">
+        <canvas id="c" width="640" height="360"></canvas>
+        <div class="canvas-meta mono">
+          <span id="condLabel">clean</span>
+          <span id="sevLabel">severity 0</span>
+        </div>
+      </div>
+
+      <div class="controls">
+        <div class="row">
+          <label class="mono small" for="cond">condition</label>
+          <select id="cond">
+            <option value="none">clean baseline</option>
+            <option value="brightness">brightness loss</option>
+            <option value="lowlight">night / low light</option>
+            <option value="contrast">contrast loss</option>
+            <option value="blur">defocus blur</option>
+            <option value="motion_blur">motion blur</option>
+            <option value="noise">sensor noise</option>
+            <option value="jpeg">stream compression</option>
+            <option value="downscale">distance</option>
+            <option value="fog">fog</option>
+            <option value="rain">rain</option>
+          </select>
+        </div>
+        <div class="row">
+          <label class="mono small" for="sev">severity <b id="sevVal">0</b></label>
+          <input id="sev" type="range" min="0" max="5" step="1" value="0">
+        </div>
+
+        <dl class="readout mono">
+          <div><dt>detail retained</dt><dd id="mDetail">100%</dd></div>
+          <div><dt>contrast (rms)</dt><dd id="mContrast">—</dd></div>
+          <div><dt>mean luma</dt><dd id="mMean">—</dd></div>
+        </dl>
+
+        <button class="btn" id="sweep">Sweep all conditions →</button>
+        <p class="muted small" id="sweepNote">Runs every condition at severity 1, 3 and 5 and measures detail retention.</p>
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table id="sweepTable">
+        <thead><tr><th>condition</th><th>maps to</th><th>sev 1</th><th>sev 3</th><th>sev 5</th></tr></thead>
+        <tbody><tr><td colspan="5" class="muted">run the sweep to fill this in</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ------------------------------------------------------------- outputs -->
+  <section class="grid2">
+    <div class="card">
+      <h3>What it produces</h3>
+      <p>Not one score. A row per condition and severity, each carrying per-class precision and
+      recall at the threshold you actually deploy, plus the change against the clean baseline.</p>
+      <pre class="code mono">python -m robustbench run \
+  --weights yolov8n.pt \
+  --images data/images --labels data/labels \
+  --device cuda --out out/
+
+  clean        sev 0  mAP 0.741  person:r=0.883 car:r=0.912
+  lowlight     sev 3  mAP 0.512  person:r=0.604 car:r=0.781
+  rain         sev 5  mAP 0.377  person:r=0.402 car:r=0.663</pre>
+      <p class="muted small">Illustrative shape only — the numbers above show the table's format.
+      Real figures come from your weights and your footage.</p>
+    </div>
+
+    <div class="card">
+      <h3>Why a GPU changes the answer</h3>
+      <p>Three things become possible that a laptop cannot do in a working day:</p>
+      <ul class="ticks">
+        <li><strong>Full-set sweeps</strong> — 10 conditions × 5 severities × your validation set, not a sample of 30 frames.</li>
+        <li><strong>Adversarial search</strong> — PGD and patch optimisation need thousands of backward passes per image.</li>
+        <li><strong>Retraining against the failures</strong> — once you know night-at-2 Mbps is where recall dies, you fine-tune on it and re-run the sweep to prove the fix.</li>
+      </ul>
+      <p class="muted small">The harness already targets <span class="mono">--device cuda</span> and falls back to CPU. Nothing else changes.</p>
+    </div>
+  </section>
+
+  <!-- --------------------------------------------------------------- method -->
+  <section class="panel">
+    <div class="panel-head"><h2>How the measurement is framed</h2></div>
+    <div class="cols">
+      <div>
+        <h4>Not mAP alone</h4>
+        <p>mAP integrates every confidence threshold, including ones you never deploy, and averages
+        classes you may not care about. A model can keep a respectable mAP while nothing fires at
+        the 0.5 cutoff production runs. So the report leads with <strong>precision and recall at
+        your threshold, per class</strong>, and keeps mAP only as a reference point.</p>
+      </div>
+      <div>
+        <h4>Failure has three shapes</h4>
+        <p>A missed object, a false alarm, and a <em>confidence drift</em> — the third is the quiet
+        one: the boxes are still right, but scores slide under the cutoff and the system stops
+        acting. Tracking the threshold shift per condition is what catches it.</p>
+      </div>
+      <div>
+        <h4>Conditions map to causes</h4>
+        <p>Each corruption is tagged with the deployment cause it represents — lighting, night,
+        optics, speed, sensor, stream bitrate, distance, weather — so a reader sees "night is the
+        problem", not "gamma 3.75 is the problem".</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- --------------------------------------------------------------- status -->
+  <section class="panel tight">
+    <div class="panel-head"><h2>Status, stated honestly</h2></div>
+    <div class="cols">
+      <div>
+        <h4>Working today</h4>
+        <ul class="ticks">
+          <li>Corruption suite — 10 conditions × 5 severities, numpy only</li>
+          <li>Metrics — 101-point AP, greedy IoU matching, per-class precision/recall at threshold</li>
+          <li>Report — JSON plus a self-contained HTML sheet</li>
+          <li>CLI — <span class="mono">python -m robustbench run</span>, CUDA or CPU</li>
+          <li>Self-test — verifies the metrics with no GPU and no dataset</li>
+        </ul>
+      </div>
+      <div>
+        <h4>Next, in order</h4>
+        <ul class="ticks">
+          <li>Adversarial layer — FGSM/PGD against the detection loss, ε sweep</li>
+          <li>Patch attack with a size sweep — "how much sticker hides a person"</li>
+          <li>ANPR mode — exact-plate match and false-match rate replace mAP</li>
+          <li>Synthetic plate generator, so plate testing needs no customer data</li>
+        </ul>
+        <p class="muted small">The explorer above is where this starts: prove the pipeline destroys the
+        signal you think it destroys, before spending GPU hours proving it costs accuracy.</p>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="foot mono">
+  <span>Edge Vision Robustness · POC</span>
+  <span>clean mAP is a lab result · robustness is a field result</span>
+</footer>
+
+<script src="assets/demo.js"></script>
+</body>
+</html>
